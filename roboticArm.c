@@ -15,8 +15,10 @@
 #define PWM_dc_MIN	500 // value of timer ticks for minimum servo displacement -> 0.5 ms
 #define PWM_period 20000 //value of timer ticks for generation of 20 ms period for PWM signal
 
-__IO uint16_t adc_val1 = 0, adc_val2 = 0, adc_val3 = 0, adc_val4 = 0, adc_val5 = 0, adc_val6 = 0;
-__IO uint16_t phi1 = 0, phi2 = 0, phi3 = 0, phi4 = 0, phi5 = 0, phi6 = 0;
+#define STEPPER_STEPS 100 // NEMA17 17HS4401S has a step angle of 1.8°
+
+__IO uint16_t adc_val0 = 0, adc_val1 = 0, adc_val2 = 0, adc_val3 = 0, adc_val4 = 0, adc_val5 = 0, adc_val6 = 0;
+__IO uint16_t phi0 = 0, phi1 = 0, phi2 = 0, phi3 = 0, phi4 = 0, phi5 = 0, phi6 = 0;
 
 void configGPIO();
 void configADC();
@@ -24,6 +26,7 @@ void configUART();
 void configPWM();
 int map(int x, int in_min, int in_max, int out_min, int out_max);
 void Servo_Write(uint8_t servoID, uint32_t phi, uint32_t lowLimit, uint32_t highLimit);//usa el valor para manipular la PWM asociada a la ID del servo
+
 void ADC_IRQHandler();
 
 int main(){
@@ -36,7 +39,7 @@ int main(){
 	uint32_t clock = SystemCoreClock; //check clock frequency while debugging
 
 	while(1){
-		/* infinite loop */
+
 	}
 
 	return 0;
@@ -65,6 +68,7 @@ void configGPIO(){
 	PINSEL_ConfigPin(&stepper_steps_and_dir_pins); // P0.4 -> Step pin for stepper motor
 	stepper_steps_and_dir_pins.Pinnum = 5;
 	PINSEL_ConfigPin(&stepper_steps_and_dir_pins); // P0.5-> Direction pin for stepper motor
+	LPC_GPIO0->FIODIR |= 0b11<<4; // P0.4 and P0.5 are outputs
 }
 
 void configADC(){
@@ -99,7 +103,7 @@ void configADC(){
 	CLKPWR_SetPCLKDiv(CLKPWR_PCLKSEL_ADC, 3); //ADC PCLK = CCLK/8
 	uint32_t aver = CLKPWR_GetPCLK (CLKPWR_PCLKSEL_ADC);
 
-	ADC_Init(LPC_ADC, 120); //adjust CLKDIV bits of AD0R to achieve this sample rate
+	ADC_Init(LPC_ADC, 120); //adjust CLKDIV bits of AD0R to achieve this sample rate 120
 
 	/* enable channel 0 to channel 5 interrupts */
 	ADC_IntConfig(LPC_ADC, ADC_ADINTEN0, ENABLE);
@@ -166,12 +170,12 @@ void configPWM(){
 	LPC_PWM1->MR0 = PWM_period;
 
 	/*Defines the arm initial position*/
-	LPC_PWM1->MR1 = PWM_dc_MIN; //1ms - default pulse duration - servo at 0 degrees
-	LPC_PWM1->MR2 = PWM_dc_MIN; //1ms - default pulse duration - servo at 0 degrees
-	LPC_PWM1->MR3 = PWM_dc_MIN; //1ms - default pulse duration - servo at 0 degrees
-	LPC_PWM1->MR4 = PWM_dc_MIN; //1ms - default pulse duration - servo at 0 degrees
-	LPC_PWM1->MR5 = PWM_dc_MIN; //1ms - default pulse duration - servo at 0 degrees
-	LPC_PWM1->MR6 = PWM_dc_MIN; //1ms - default pulse duration - servo at 0 degrees
+	LPC_PWM1->MR1 = 1000; //1ms - default pulse duration - servo at 0 degrees
+	LPC_PWM1->MR2 = 1000; //1ms - default pulse duration - servo at 0 degrees
+	LPC_PWM1->MR3 = 1000; //1ms - default pulse duration - servo at 0 degrees
+	LPC_PWM1->MR4 = 1000; //1ms - default pulse duration - servo at 0 degrees
+	LPC_PWM1->MR5 = 1000; //1ms - default pulse duration - servo at 0 degrees
+	LPC_PWM1->MR6 = 1000; //1ms - default pulse duration - servo at 0 degrees
 
 	LPC_PWM1->MCR = (1<<1); //Reset PWM TC on PWM1MR0 match
 	LPC_PWM1->LER = (1<<1) | (1<<0) | (1<<2) | (1<<3) | (1<<4) | (1<<5) | (1<<6); //update values in MR0 and MR1
@@ -222,59 +226,80 @@ void Servo_Write(uint8_t servoID, uint32_t phi, uint32_t lowLimit, uint32_t high
 void ADC_IRQHandler(){
 	/* -----------------------------SERVOS CONTROL LOGIC------------------------------*/
 	/* -------------------------------------------------------------------------------*/
-	if(ADC_ChannelGetStatus(LPC_ADC, 4, ADC_DATA_DONE)){ //canal 4-> mov en x
+	if(ADC_ChannelGetStatus(LPC_ADC, 0, ADC_DATA_DONE)){ //channel 0 -> used for stepper
 
-		adc_val1 = ADC_ChannelGetData(LPC_ADC, 4);
+		uint32_t i;
+		adc_val0 = ADC_ChannelGetData(LPC_ADC, 0);
+		if (adc_val0 < 1500){
+			LPC_GPIO0->FIOCLR |= (1<<5); //set direction of rotation on P0.5
+
+			LPC_GPIO0->FIOSET |= (1<<4);
+			//for(i = 0; i<100; i++);
+			LPC_GPIO0->FIOCLR |= (1<<4);
+			//for(i = 0; i<100; i++);
+
+			//adc_val0 = ADC_ChannelGetData(LPC_ADC, 0);
+			//phi0 = map(adc_val0, 0, 4095, 0, 180);
+			//UART_SendByte(LPC_UART0, phi0);
+		}
+		else if (adc_val0 > 2500){
+			LPC_GPIO0->FIOSET |= (1<<5); //set direction of rotation on P0.5
+
+			LPC_GPIO0->FIOSET |= (1<<4);
+			//for(i = 0; i<100; i++);
+			LPC_GPIO0->FIOCLR |= (1<<4);
+			//for(i = 0; i<100; i++);
+
+			//adc_val0 = ADC_ChannelGetData(LPC_ADC, 0);
+			//phi0 = map(adc_val0, 0, 4095, 0, 180);
+			//UART_SendByte(LPC_UART0, phi0);
+		}
+	}
+	else if(ADC_ChannelGetStatus(LPC_ADC, 1, ADC_DATA_DONE)){//channel 1 -> used for servo 1 - shouler joint 1
+
+		adc_val1 = ADC_ChannelGetData(LPC_ADC, 1);
 		phi1 = map(adc_val1, 0, 4095, 0, 180);
 		Servo_Write(0 , phi1, 500, 2500);
 		UART_SendByte(LPC_UART0, phi1);
-
-		if(adc_val1 >= 2500){
-			LPC_GPIO2->FIOSET |= (1<<9);
-			LPC_GPIO2->FIOCLR |= (1<<8);
-			LPC_GPIO2->FIOCLR |= (1<<7);
-			LPC_GPIO2->FIOCLR |= (1<<6);
-		}
-		else if (adc_val1 <= 1500){
-			LPC_GPIO2->FIOSET |= (1<<8);
-			LPC_GPIO2->FIOCLR |= (1<<9);
-			LPC_GPIO2->FIOCLR |= (1<<7);
-			LPC_GPIO2->FIOCLR |= (1<<6);
-		}
-		else{
-			LPC_GPIO2->FIOCLR |= (1<<2);
-			LPC_GPIO2->FIOCLR |= (1<<3);
-			LPC_GPIO2->FIOCLR |= (1<<1);
-			LPC_GPIO2->FIOCLR |= (1<<0);
-		}
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 5, ADC_DATA_DONE)){//canal 5-> mov en y
+	else if(ADC_ChannelGetStatus(LPC_ADC, 2, ADC_DATA_DONE)){//channel 2 -> used for servo 2 - shoulder joint 2
 
-		adc_val2 = ADC_ChannelGetData(LPC_ADC, 5);
+		adc_val2 = ADC_ChannelGetData(LPC_ADC, 2);
 		phi2 = map(adc_val2, 0, 4095, 0, 180);
 		Servo_Write(1 , phi2, 500, 2500);
 		UART_SendByte(LPC_UART0, phi2);
+	}
+	else if(ADC_ChannelGetStatus(LPC_ADC, 3, ADC_DATA_DONE)){//channel 3 -> used for servo 3 - elbow joint
 
-		if(adc_val2 >= 2500){
-			LPC_GPIO2->FIOSET |= (1<<7);
-			LPC_GPIO2->FIOCLR |= (1<<6);
-			LPC_GPIO2->FIOCLR |= (1<<8);
-			LPC_GPIO2->FIOCLR |= (1<<9);
-		}
-		else if (adc_val2 <= 1500){
-			LPC_GPIO2->FIOSET |= (1<<6);
-			LPC_GPIO2->FIOCLR |= (1<<7);
-			LPC_GPIO2->FIOCLR |= (1<<8);
-			LPC_GPIO2->FIOCLR |= (1<<9);
-		}
-		else{
-			LPC_GPIO2->FIOCLR |= (1<<9);
-			LPC_GPIO2->FIOCLR |= (1<<8);
-			LPC_GPIO2->FIOCLR |= (1<<7);
-			LPC_GPIO2->FIOCLR |= (1<<6);
-		}
+		adc_val3 = ADC_ChannelGetData(LPC_ADC, 3);
+		phi3 = map(adc_val3, 0, 4095, 0, 180);
+		Servo_Write(2 , phi3, 500, 2500);
+		UART_SendByte(LPC_UART0, phi3);
+	}
+	else if(ADC_ChannelGetStatus(LPC_ADC, 4, ADC_DATA_DONE)){//channel 4 -> used for servo 4 - wrist joint 1
+
+		adc_val4 = ADC_ChannelGetData(LPC_ADC, 4);
+		phi4 = map(adc_val4, 0, 4095, 0, 180);
+		Servo_Write(3 , phi4, 500, 2500);
+		UART_SendByte(LPC_UART0, phi4);
+	}
+	else if(ADC_ChannelGetStatus(LPC_ADC, 5, ADC_DATA_DONE)){//channel 5 -> used for servo 5 - wrist joint 2
+
+		adc_val5 = ADC_ChannelGetData(LPC_ADC, 5);
+		phi5 = map(adc_val5, 0, 4095, 0, 180);
+		Servo_Write(4 , phi5, 500, 2500);
+		UART_SendByte(LPC_UART0, phi5);
+	}
+	else if(ADC_ChannelGetStatus(LPC_ADC, 6, ADC_DATA_DONE)){//channel 6 -> used for servo 6 - gripper joint
+
+		adc_val6 = ADC_ChannelGetData(LPC_ADC, 6);
+		phi6 = map(adc_val6, 0, 4095, 0, 180);
+		Servo_Write(5 , phi6, 500, 2500);
+		UART_SendByte(LPC_UART0, phi6);
 	}
 }
+
+
 
 
 
