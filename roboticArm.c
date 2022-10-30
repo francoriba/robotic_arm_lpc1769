@@ -97,6 +97,12 @@ void configADC(){
 	analog_pins_cfg_struct.Pinnum = 31;
 	analog_pins_cfg_struct.Funcnum = PINSEL_FUNC_3;
 	PINSEL_ConfigPin(&analog_pins_cfg_struct);
+	/* Configure pin P0.3 as AD0.6 */
+	analog_pins_cfg_struct.Portnum = 0;
+	analog_pins_cfg_struct.Pinnum = 3;
+	analog_pins_cfg_struct.Funcnum = PINSEL_FUNC_2;
+	PINSEL_ConfigPin(&analog_pins_cfg_struct);
+
 
 	/* -----------------------------ADC CONFIGURATION---------------------------------*/
 	/* -------------------------------------------------------------------------------*/
@@ -112,6 +118,7 @@ void configADC(){
 	ADC_IntConfig(LPC_ADC, ADC_ADINTEN3, ENABLE);
 	ADC_IntConfig(LPC_ADC, ADC_ADINTEN4, ENABLE);
 	ADC_IntConfig(LPC_ADC, ADC_ADINTEN5, ENABLE);
+	ADC_IntConfig(LPC_ADC, ADC_ADINTEN6, ENABLE);
 
 	/* enable channel 0 to channel 5*/
 	ADC_ChannelCmd(LPC_ADC, 0, ENABLE);
@@ -120,6 +127,8 @@ void configADC(){
 	ADC_ChannelCmd(LPC_ADC, 3, ENABLE);
 	ADC_ChannelCmd(LPC_ADC, 4, ENABLE);
 	ADC_ChannelCmd(LPC_ADC, 5, ENABLE);
+	ADC_ChannelCmd(LPC_ADC, 6, ENABLE);
+
 
 	ADC_BurstCmd(LPC_ADC, 1); // Set Burst mode
 
