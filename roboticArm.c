@@ -271,10 +271,16 @@ void ADC_IRQHandler(){
 		Servo_Write(0 , phi1, 500, 2500);
 		UART_SendByte(LPC_UART0, phi1);
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 2, ADC_DATA_DONE)){//channel 2 -> used for servo 2 - shoulder joint 2
+	else if(ADC_ChannelGetStatus(LPC_ADC, 2, ADC_DATA_DONE)){//channel 2 -> used for servo 2 - shoulder joint 2 (mirrored)
 
 		adc_val2 = ADC_ChannelGetData(LPC_ADC, 2);
 		phi2 = map(adc_val2, 0, 4095, 0, 180);
+		if(phi2>90){
+			phi2 = 90 - (phi2-90);
+		}
+		else {
+			phi2 = 90 + (90-phi2);
+		}
 		Servo_Write(1 , phi2, 500, 2500);
 		UART_SendByte(LPC_UART0, phi2);
 	}
