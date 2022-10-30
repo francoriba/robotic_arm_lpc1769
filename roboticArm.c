@@ -264,53 +264,51 @@ void ADC_IRQHandler(){
 			//UART_SendByte(LPC_UART0, phi0);
 		}
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 1, ADC_DATA_DONE)){//channel 1 -> used for servo 1 - shouler joint 1
+	else if(ADC_ChannelGetStatus(LPC_ADC, 1, ADC_DATA_DONE)){//channel 1 -> used for servo 1 - shouler joint 1 and 2
 
 		adc_val1 = ADC_ChannelGetData(LPC_ADC, 1);
 		phi1 = map(adc_val1, 0, 4095, 0, 180);
-		Servo_Write(0 , phi1, 500, 2500);
-		UART_SendByte(LPC_UART0, phi1);
+		Servo_Write(0 , phi1, 500, 2500); //usamos el valor mapeado para el servo0 directamente
+		//UART_SendByte(LPC_UART0, phi1); //mandomos el angulo 'original'
+
+		//morroring
+		if(phi1>90){ //por ej si phi1 era 100, el valor mirroreado va a ser 80 y si era 80 el valor mirroreado va a ser 100
+			phi1 = 90 - (phi1-90);
+		}
+		else {
+			phi1 = 90 + (90-phi1);
+		}
+		//usamos el valor mirroreado para el servo 1
+		Servo_Write(1 , phi1, 500, 2500); // mirrored
+		//UART_SendByte(LPC_UART0, phi1); //mandamos el angulo espjeado
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 2, ADC_DATA_DONE)){//channel 2 -> used for servo 2 - shoulder joint 2 (mirrored)
+	else if(ADC_ChannelGetStatus(LPC_ADC, 2, ADC_DATA_DONE)){//channel 2 -> used for servo 3 - elbow joint
 
 		adc_val2 = ADC_ChannelGetData(LPC_ADC, 2);
 		phi2 = map(adc_val2, 0, 4095, 0, 180);
-		if(phi2>90){
-			phi2 = 90 - (phi2-90);
-		}
-		else {
-			phi2 = 90 + (90-phi2);
-		}
-		Servo_Write(1 , phi2, 500, 2500);
+		Servo_Write(2 , phi2, 500, 2500);
 		UART_SendByte(LPC_UART0, phi2);
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 3, ADC_DATA_DONE)){//channel 3 -> used for servo 3 - elbow joint
+	else if(ADC_ChannelGetStatus(LPC_ADC, 3, ADC_DATA_DONE)){//channel 3 -> used for servo 4 - wrist joint 1
 
 		adc_val3 = ADC_ChannelGetData(LPC_ADC, 3);
 		phi3 = map(adc_val3, 0, 4095, 0, 180);
-		Servo_Write(2 , phi3, 500, 2500);
+		Servo_Write(3 , phi3, 500, 2500);
 		UART_SendByte(LPC_UART0, phi3);
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 4, ADC_DATA_DONE)){//channel 4 -> used for servo 4 - wrist joint 1
+	else if(ADC_ChannelGetStatus(LPC_ADC, 4, ADC_DATA_DONE)){//channel 4 -> used for servo 5 - wrist joint 2
 
 		adc_val4 = ADC_ChannelGetData(LPC_ADC, 4);
 		phi4 = map(adc_val4, 0, 4095, 0, 180);
-		Servo_Write(3 , phi4, 500, 2500);
+		Servo_Write(4 , phi4, 500, 2500);
 		UART_SendByte(LPC_UART0, phi4);
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 5, ADC_DATA_DONE)){//channel 5 -> used for servo 5 - wrist joint 2
+	else if(ADC_ChannelGetStatus(LPC_ADC, 5, ADC_DATA_DONE)){ //channel 5 -> used for servo 6 - gripper joint
 
 		adc_val5 = ADC_ChannelGetData(LPC_ADC, 5);
 		phi5 = map(adc_val5, 0, 4095, 0, 180);
-		Servo_Write(4 , phi5, 500, 2500);
+		Servo_Write(5 , phi5, 500, 2500);
 		UART_SendByte(LPC_UART0, phi5);
-	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 6, ADC_DATA_DONE)){//channel 6 -> used for servo 6 - gripper joint
-
-		adc_val6 = ADC_ChannelGetData(LPC_ADC, 6);
-		phi6 = map(adc_val6, 0, 4095, 0, 180);
-		Servo_Write(5 , phi6, 500, 2500);
-		UART_SendByte(LPC_UART0, phi6);
 	}
 }
 
