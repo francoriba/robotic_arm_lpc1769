@@ -17,22 +17,32 @@
 
 #define STEPPER_STEPS 100 // NEMA17 17HS4401S has a step angle of 1.8°
 
-__IO uint16_t adc_val0 = 0, adc_val1 = 0, adc_val2 = 0, adc_val3 = 0, adc_val4 = 0, adc_val5 = 0, adc_val6 = 0;
-__IO uint16_t phi0 = 0, phi1 = 0, phi2 = 0, phi3 = 0, phi4 = 0, phi5 = 0, phi6 = 0;
+uint16_t adc_val0 = 0, adc_val1 = 0, adc_val2 = 0, adc_val3 = 0, adc_val4 = 0, adc_val5 = 0, adc_val6 = 0;
+uint8_t phi0 = 0, phi1 = 0, phi2 = 0, phi3 = 0, phi4 = 0, phi5 = 0, phi6 = 0;
+uint8_t accuracy_mode = 0;
+uint8_t adc_first_time = 1;
+uint8_t adc_toggle = 0;
+
+
 
 void configGPIO();
 void configADC();
 void configUART();
 void configPWM();
+void configEINTX();
 int map(int x, int in_min, int in_max, int out_min, int out_max);
 void Servo_Write(uint8_t servoID, uint32_t phi, uint32_t lowLimit, uint32_t highLimit);//usa el valor para manipular la PWM asociada a la ID del servo
-
+void accure_move(uint16_t adc_value, uint8_t *phix, uint8_t servoID);
+/* IRS Handlers*/
+void EINT0_IRQHandler();
+void EINT1_IRQHandler();
 void ADC_IRQHandler();
 
 int main(){
 
 	SystemInit();
 	configGPIO();
+	configEINTX();
 	configUART();
 	configPWM();
 	configADC();
@@ -109,9 +119,9 @@ void configADC(){
 	CLKPWR_SetPCLKDiv(CLKPWR_PCLKSEL_ADC, 3); //ADC PCLK = CCLK/8
 	uint32_t aver = CLKPWR_GetPCLK (CLKPWR_PCLKSEL_ADC);
 
-	ADC_Init(LPC_ADC, 120); //adjust CLKDIV bits of AD0R to achieve this sample rate 120
+	ADC_Init(LPC_ADC, 120); //adjust CLKDIV bits of AD0R to achieve this sample rate
 
-	/* enable channel 0 to channel 5 interrupts */
+	/* enable channel 0 to channel 6 interrupts */
 	ADC_IntConfig(LPC_ADC, ADC_ADINTEN0, ENABLE);
 	ADC_IntConfig(LPC_ADC, ADC_ADINTEN1, ENABLE);
 	ADC_IntConfig(LPC_ADC, ADC_ADINTEN2, ENABLE);
@@ -120,7 +130,7 @@ void configADC(){
 	ADC_IntConfig(LPC_ADC, ADC_ADINTEN5, ENABLE);
 	ADC_IntConfig(LPC_ADC, ADC_ADINTEN6, ENABLE);
 
-	/* enable channel 0 to channel 5*/
+	/* enable channel 0 to channel 6*/
 	ADC_ChannelCmd(LPC_ADC, 0, ENABLE);
 	ADC_ChannelCmd(LPC_ADC, 1, ENABLE);
 	ADC_ChannelCmd(LPC_ADC, 2, ENABLE);
@@ -194,6 +204,30 @@ void configPWM(){
 	LPC_PWM1->TCR |= (1<<3); //enable counters and PWM Mode
 }
 
+void configEINTX(){
+	/* -------------------------------EINTX PINS CONFIGURATION------------------------*/
+	/* -------------------------------------------------------------------------------*/
+	PINSEL_CFG_Type extintx_pin;
+	extintx_pin.Portnum = 2;
+	extintx_pin.Pinnum = 10;
+	extintx_pin.Pinmode = PINSEL_PINMODE_PULLUP;
+	extintx_pin.Funcnum = 1;
+	extintx_pin.OpenDrain = PINSEL_PINMODE_NORMAL;
+	PINSEL_ConfigPin(&extintx_pin); //P2.10 as EINT0 (used for accuracy mode selection)
+	extintx_pin.Pinnum = 11;
+	//PINSEL_ConfigPin(&extintx_pin);//P2.11 as EINT1 (used for ADC start/stop)
+
+	/* ---------------------------------EINTX CONFIGURATION---------------------------*/
+	/* -------------------------------------------------------------------------------*/
+	EXTI_SetMode(EXTI_EINT0, EXTI_MODE_EDGE_SENSITIVE);
+	EXTI_SetPolarity(EXTI_EINT0, EXTI_POLARITY_LOW_ACTIVE_OR_FALLING_EDGE);
+	NVIC_EnableIRQ(EINT0_IRQn);
+
+//	EXTI_SetMode(EXTI_EINT1, EXTI_MODE_EDGE_SENSITIVE);
+//	EXTI_SetPolarity(EXTI_EINT1, EXTI_POLARITY_LOW_ACTIVE_OR_FALLING_EDGE);
+//	NVIC_EnableIRQ(EINT1_IRQn);
+}
+
 int map(int x, int in_min, int in_max, int out_min, int out_max){
 	return ((out_max-out_min)*x)/(in_max-in_min) + out_min;
 }
@@ -232,6 +266,41 @@ void Servo_Write(uint8_t servoID, uint32_t phi, uint32_t lowLimit, uint32_t high
 	}
 }
 
+void accure_move(uint16_t adc_value, uint8_t *phix, uint8_t servoID){
+	if(adc_value > 3000){
+		*phix += 1;
+		if (*phix == 180){
+			Servo_Write(servoID , 180, 500, 2500); //llego al tope maximo, permanece ahi
+			*phix-=1;
+		}
+		else{Servo_Write(servoID , *phix, 500, 2500);} //no llego al tope, incrementar un grado
+	}
+	else if (adc_value < 3000 && adc_value > 1000){ // no se esta moviendo el joystick, mantener en pos actual
+		Servo_Write(servoID , *phix, 500, 2500);}
+	else{
+		*phix-=1;
+		if(phix == 0){//llego al minimo, permanece ahi
+			Servo_Write(servoID , 0, 500, 2500);
+			*phix += 1;
+		}
+		else{Servo_Write(servoID , *phix, 500, 2500); }//decrementar un grado
+	}
+}
+
+void EINT0_IRQHandler(){
+	accuracy_mode ^= 1<<0; //toggle this flag state
+	EXTI_ClearEXTIFlag(EXTI_EINT0);
+}
+
+void EINT1_IRQHandler(){
+	if(adc_first_time){configADC(); adc_first_time = 0;}
+	else{
+		if(adc_toggle){ADC_Init(LPC_ADC, 120); adc_toggle = 0;}
+		else{ADC_DeInit(LPC_ADC); adc_toggle = 1;}
+	}
+	EXTI_ClearEXTIFlag(EXTI_EINT1);
+}
+
 void ADC_IRQHandler(){
 	/* -----------------------------SERVOS CONTROL LOGIC------------------------------*/
 	/* -------------------------------------------------------------------------------*/
@@ -264,53 +333,78 @@ void ADC_IRQHandler(){
 			//UART_SendByte(LPC_UART0, phi0);
 		}
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 1, ADC_DATA_DONE)){//channel 1 -> used for servo 1 - shouler joint 1 and 2
+	else if(ADC_ChannelGetStatus(LPC_ADC, 1, ADC_DATA_DONE)){//channel 1 -> used for servo 1 - shouler joint 1
 
 		adc_val1 = ADC_ChannelGetData(LPC_ADC, 1);
-		phi1 = map(adc_val1, 0, 4095, 0, 180);
-		Servo_Write(0 , phi1, 500, 2500); //usamos el valor mapeado para el servo0 directamente
-		//UART_SendByte(LPC_UART0, phi1); //mandomos el angulo 'original'
 
-		//morroring
-		if(phi1>90){ //por ej si phi1 era 100, el valor mirroreado va a ser 80 y si era 80 el valor mirroreado va a ser 100
-			phi1 = 90 - (phi1-90);
+		if(accuracy_mode){ accure_move(adc_val1, &phi1, 0);}
+		else{
+			phi1 = map(adc_val1, 0, 4095, 0, 180);
+			Servo_Write(0 , phi1, 500, 2500); //usamos el valor mapeado para el servo0 directamente
+			UART_SendByte(LPC_UART0, phi1); //mandomos el angulo 'original'
 		}
-		else {
-			phi1 = 90 + (90-phi1);
-		}
-		//usamos el valor mirroreado para el servo 1
-		Servo_Write(1 , phi1, 500, 2500); // mirrored
-		//UART_SendByte(LPC_UART0, phi1); //mandamos el angulo espjeado
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 2, ADC_DATA_DONE)){//channel 2 -> used for servo 3 - elbow joint
+	else if(ADC_ChannelGetStatus(LPC_ADC, 2, ADC_DATA_DONE)){//channel 1 -> used for servo 2 - shouler joint 2 (mirror)
 
-		adc_val2 = ADC_ChannelGetData(LPC_ADC, 2);
-		phi2 = map(adc_val2, 0, 4095, 0, 180);
-		Servo_Write(2 , phi2, 500, 2500);
-		UART_SendByte(LPC_UART0, phi2);
+		adc_val2 = ADC_ChannelGetData(LPC_ADC, 1);
+
+		if(accuracy_mode){ accure_move(adc_val2, &phi2, 1);}
+		else{
+			phi2 = map(adc_val2, 0, 4095, 0, 180);
+			// realizamos mirroring ya que los motores del shoulder se encuentran enfrentados
+			if(phi2>90){phi2 = 90 - (phi2-90);}
+			else {phi2 = 90 + (90-phi2);}
+			Servo_Write(1 , phi2, 500, 2500);
+			UART_SendByte(LPC_UART0, phi1); //mandamos el angulo espjeado
+		}
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 3, ADC_DATA_DONE)){//channel 3 -> used for servo 4 - wrist joint 1
+	else if(ADC_ChannelGetStatus(LPC_ADC, 3, ADC_DATA_DONE)){//channel 3 -> used for servo 3 - elbow joint
 
 		adc_val3 = ADC_ChannelGetData(LPC_ADC, 3);
-		phi3 = map(adc_val3, 0, 4095, 0, 180);
-		Servo_Write(3 , phi3, 500, 2500);
+
+		if(accuracy_mode){ accure_move(adc_val3, &phi3, 2);}
+		else{
+			phi3 = map(adc_val3, 0, 4095, 0, 180);
+			Servo_Write(2 , phi3, 500, 2500);
+		}
 		UART_SendByte(LPC_UART0, phi3);
+
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 4, ADC_DATA_DONE)){//channel 4 -> used for servo 5 - wrist joint 2
+	else if(ADC_ChannelGetStatus(LPC_ADC, 4, ADC_DATA_DONE)){//channel 4 -> used for servo 4 - wrist joint 1
 
 		adc_val4 = ADC_ChannelGetData(LPC_ADC, 4);
-		phi4 = map(adc_val4, 0, 4095, 0, 180);
-		Servo_Write(4 , phi4, 500, 2500);
+
+		if(accuracy_mode){ accure_move(adc_val4, &phi4, 3);}
+		else{
+			phi4 = map(adc_val4, 0, 4095, 0, 180);
+			Servo_Write(3 , phi4, 500, 2500);
+		}
 		UART_SendByte(LPC_UART0, phi4);
 	}
-	else if(ADC_ChannelGetStatus(LPC_ADC, 5, ADC_DATA_DONE)){ //channel 5 -> used for servo 6 - gripper joint
+	else if(ADC_ChannelGetStatus(LPC_ADC, 5, ADC_DATA_DONE)){//channel 5 -> used for servo 5 - wrist joint 2
 
 		adc_val5 = ADC_ChannelGetData(LPC_ADC, 5);
-		phi5 = map(adc_val5, 0, 4095, 0, 180);
-		Servo_Write(5 , phi5, 500, 2500);
+
+		if(accuracy_mode){ accure_move(adc_val5, &phi5, 4);}
+		else{
+			phi5 = map(adc_val5, 0, 4095, 0, 180);
+			Servo_Write(4 , phi5, 500, 2500);
+		}
 		UART_SendByte(LPC_UART0, phi5);
 	}
+	else if(ADC_ChannelGetStatus(LPC_ADC, 6, ADC_DATA_DONE)){ //channel 6 -> used for servo 6 - gripper joint
+
+		adc_val6 = ADC_ChannelGetData(LPC_ADC, 6);
+
+		if(accuracy_mode){ accure_move(adc_val6, &phi6, 5);}
+		else{
+			phi6 = map(adc_val6, 0, 4095, 0, 180);
+			Servo_Write(5 , phi6, 500, 2500);
+		}
+		UART_SendByte(LPC_UART0, phi6);
+	}
 }
+
 
 
 
