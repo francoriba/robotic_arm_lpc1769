@@ -1,4 +1,4 @@
-#   3D Printed Robotic Arm Using LPC1769 Microcontroller with Nema 17 stepper motor and MG996R servomotors + Phyton script for UART data plotting 
+#   3D Printed Robotic Arm Using LPC1769 Microcontroller with Nema 17 stepper motor and MG996R servomotors + Python script for UART data plotting 
 This work corresponds to the final project for the Digital Electronics 3 subject in FCEFyN - UNC, Argentina 2022
 
 - IDE: [MCUXpresso IDE](https://www.nxp.com/design/software/development-software/mcuxpresso-software-and-tools-/mcuxpresso-integrated-development-environment-ide:MCUXpresso-IDE).
