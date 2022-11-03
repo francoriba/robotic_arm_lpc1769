@@ -8,8 +8,8 @@ This work corresponds to the final project for the Digital Electronics 3 subject
 - Hardware Bloks in use: ADC, PWM, GPIO, EXTINT, UART, DMA.
 ---
 ## LPCXpresso LPC1769
-![lpc1769](img/lpc1769_lpcxpresso.png "LPCXpresso LPC1769 revC.") 
-![lpc1769_pinout](img/lpc1769_pinout.png "LPCXpresso LPC1769 pinout")
+![lpc1769](img/schematic "Robotic Arm Connections") 
+![lpc1769_pinout](img/LPC1769_pinout.jpg "LPC1769 Pinout")
 ---
 Autors: @camilacareggio @ccasanueva7 @francoriba
 
