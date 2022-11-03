@@ -12,8 +12,7 @@ This work corresponds to the final project for the Digital Electronics 3 subject
 ![lpc1769](img/schematic.png "Robotic Arm Connections") 
 ![lpc1769_pinout](img/LPC1769_pinout.jpg "LPC1769 Pinout")
 ---
-##3D Model
-
+## 3D Model
 The 3D model of the robotic arm used for this project was designed by LimpSquid (https://github.com/limpsquid) and you can find it in his Thingiverse profile: https://www.thingiverse.com/limpsquid/designs
 -This model was printed by a Ender3 Printer
 ---
