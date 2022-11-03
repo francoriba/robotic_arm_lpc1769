@@ -30,14 +30,20 @@ serialInst.port = portVar
 
 serialInst.open()
 
-# for k in range(26):
-#     packet2 = serialInst.read() #readline
-#     int_val2 = int.from_bytes(packet2, "big")
-#     print(chr(int_val2), end='')
+message = []
+
+for k in range(26):
+    packet2 = serialInst.read() #readline
+    int_val2 = int.from_bytes(packet2, "big")
+    message.append(chr(int_val2))
+s = ''.join(message)
+print(s)
+
 
 # Create figure for plotting
 fig = plt.figure()
 ax = fig.add_subplot(1, 1, 1)
+fig.canvas.manager.set_window_title('Servo motor Plotter')
 xs = []
 ys = []
 i = 0
@@ -60,14 +66,16 @@ def animate(i, xs, ys):
 
     # Draw x and y lists
     ax.clear()
-    ax.plot(xs, ys)
-
+    ax.plot(xs, ys, color = 'red')
+    ax.set_facecolor("black")
     # Format plot
     plt.xticks(rotation=45, ha='right')
     plt.subplots_adjust(bottom=0.30)
-    plt.title('Posición del Servo Motor')
+    plt.title('Posición del Servo Motor',fontweight='bold', color = 'red')
     plt.ylabel('Ángulo de rotación [°]')
-    plt.ylim(0, 185)
+    plt.xlabel('Instante')
+    plt.ylim(-10, 200)
+    plt.grid()
 
 # Set up plot to call animate() function periodically
 ani = animation.FuncAnimation(fig, animate, fargs=(xs, ys), interval=10)

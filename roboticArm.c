@@ -29,6 +29,7 @@ uint8_t uart_channel = 5; //flag for selection of with ADC channel data transmit
 
 uint8_t welcome_message[] = "Hola MI NOMBRE ES C.R.A.B";
 
+/* Function prototypes */
 void configGPIO();
 void configADC();
 void configUART();
@@ -39,9 +40,8 @@ void configTIMER();
 int map(int x, int in_min, int in_max, int out_min, int out_max);
 void Servo_Write(uint8_t servoID, uint32_t phi, uint32_t lowLimit, uint32_t highLimit);//usa el valor para manipular la PWM asociada a la ID del servo
 void accure_move(uint16_t adc_value, uint8_t *phix, uint8_t servoID);
-/* IRS Handlers*/
+/* ISR Handlers*/
 void EINT0_IRQHandler();
-void TIMER0_IRQHandler();
 void EINT1_IRQHandler();
 void ADC_IRQHandler();
 
@@ -228,16 +228,16 @@ void configEINTX(){
 	extintx_pin.Pinnum = 11;
 	PINSEL_ConfigPin(&extintx_pin);//P2.11 as EINT1 (used for ADC start/stop)
 	extintx_pin.Pinnum = 12;
-	PINSEL_ConfigPin(&extintx_pin);//P2.11 as EINT2 (used for change the ADC channel being transmited with UART
+	PINSEL_ConfigPin(&extintx_pin);//P2.12 as EINT2 (used for change the ADC channel being transmited with UART
 	/* ---------------------------------EINTX CONFIGURATION---------------------------*/
 	/* -------------------------------------------------------------------------------*/
 	EXTI_SetMode(EXTI_EINT0, EXTI_MODE_EDGE_SENSITIVE);
 	EXTI_SetPolarity(EXTI_EINT0, EXTI_POLARITY_LOW_ACTIVE_OR_FALLING_EDGE);
 	NVIC_EnableIRQ(EINT0_IRQn);
 
-//	EXTI_SetMode(EXTI_EINT1, EXTI_MODE_EDGE_SENSITIVE);
-//	EXTI_SetPolarity(EXTI_EINT1, EXTI_POLARITY_LOW_ACTIVE_OR_FALLING_EDGE);
-//	NVIC_EnableIRQ(EINT1_IRQn);
+	EXTI_SetMode(EXTI_EINT1, EXTI_MODE_EDGE_SENSITIVE);
+	EXTI_SetPolarity(EXTI_EINT1, EXTI_POLARITY_LOW_ACTIVE_OR_FALLING_EDGE);
+	NVIC_EnableIRQ(EINT1_IRQn);
 
 	EXTI_SetMode(EXTI_EINT2, EXTI_MODE_EDGE_SENSITIVE);
 	EXTI_SetPolarity(EXTI_EINT2, EXTI_POLARITY_LOW_ACTIVE_OR_FALLING_EDGE);
@@ -326,11 +326,10 @@ void EINT0_IRQHandler(){
 }
 
 void EINT1_IRQHandler(){
-	if(adc_first_time){configADC(); adc_first_time = 0;}
-	else{
-		if(adc_toggle){ADC_Init(LPC_ADC, 120); adc_toggle = 0;}
-		else{ADC_DeInit(LPC_ADC); adc_toggle = 1;}
-	}
+
+	if(adc_toggle){NVIC_EnableIRQ(ADC_IRQn); adc_toggle = 0;}
+	else{NVIC_DisableIRQ(ADC_IRQn); adc_toggle = 1;}
+
 	EXTI_ClearEXTIFlag(EXTI_EINT1);
 }
 void EINT2_IRQHandler(){
