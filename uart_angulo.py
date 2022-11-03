@@ -30,58 +30,47 @@ serialInst.port = portVar
 
 serialInst.open()
 
-cont = 0
+# for k in range(26):
+#     packet2 = serialInst.read() #readline
+#     int_val2 = int.from_bytes(packet2, "big")
+#     print(chr(int_val2), end='')
 
-
-plt.ion()
+# Create figure for plotting
 fig = plt.figure()
-
-x = list()
-y = list()
+ax = fig.add_subplot(1, 1, 1)
+xs = []
+ys = []
 i = 0
 
 
+# This function is called periodically from FuncAnimation
+def animate(i, xs, ys):
 
+    packet1 = serialInst.read()
+    int_val1 = int.from_bytes(packet1, "big")
 
-while True:   
-    cont += 1
-    if cont == 1: 
-        packet1 = serialInst.read() #readline
-        int_val1 = int.from_bytes(packet1, "big")
-        print("Shoulder joint:\t", int_val1)
-        x.append(i)
-        y.append(int_val1)
-        plt.scatter(i, int(int_val1))
-        i += 1
-        plt.grid()
-        plt.show()
-        plt.pause(0.000001)
+    # Add x and y to lists
+    xs.append(i)
+    ys.append(int_val1)
+    i += 1
 
-    elif cont == 2:
-        packet2 = serialInst.read() #readline
-        int_val2 = int.from_bytes(packet2, "big")
-        print("Elbow joint:\t", int_val2)
+    # Limit x and y lists to 20 items
+    xs = xs[-20:]
+    ys = ys[-20:]
 
-    elif cont == 3:
-        packet3 = serialInst.read() #readline
-        int_val3 = int.from_bytes(packet3, "big")
-        print("Wrist joint 1:\t", int_val3)
+    # Draw x and y lists
+    ax.clear()
+    ax.plot(xs, ys)
 
-    elif cont == 4:
-        packet4 = serialInst.read() #readline
-        int_val4 = int.from_bytes(packet4, "big")
-        print("Wrist joint 2:\t", int_val4)
+    # Format plot
+    plt.xticks(rotation=45, ha='right')
+    plt.subplots_adjust(bottom=0.30)
+    plt.title('Posición del Servo Motor')
+    plt.ylabel('Ángulo de rotación [°]')
+    plt.ylim(0, 185)
 
-    elif cont == 5:
-        packet5 = serialInst.read() #readline
-        int_val5 = int.from_bytes(packet5, "big")
-        print("Gripper joint:\t", int_val5)
-        cont = 0
+# Set up plot to call animate() function periodically
+ani = animation.FuncAnimation(fig, animate, fargs=(xs, ys), interval=10)
+plt.show()
 
-
-
-    #time.sleep(0.1)
-
-
-
-serialInst.close()
+#serialInst.close()

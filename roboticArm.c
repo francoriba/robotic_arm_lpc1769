@@ -10,6 +10,9 @@
 #include "lpc17xx_timer.h"
 #include "lpc17xx_adc.h"
 #include "lpc17xx_uart.h"
+#include "lpc17xx_gpdma.h"
+#include "string.h"
+
 
 #define PWM_dc_MAX	2500 // value of timer ticks for maximum servo displacement -> 2,5 ms
 #define PWM_dc_MIN	500 // value of timer ticks for minimum servo displacement -> 0.5 ms
@@ -19,22 +22,26 @@
 
 uint16_t adc_val0 = 0, adc_val1 = 0, adc_val2 = 0, adc_val3 = 0, adc_val4 = 0, adc_val5 = 0, adc_val6 = 0;
 uint8_t phi0 = 0, phi1 = 0, phi2 = 0, phi3 = 0, phi4 = 0, phi5 = 0, phi6 = 0;
-uint8_t accuracy_mode = 0;
-uint8_t adc_first_time = 1;
-uint8_t adc_toggle = 0;
+uint8_t accuracy_mode = 0; //flag to check in which mode we want to controll de robotic arm
+uint8_t adc_first_time = 1; //flag to check is still pending to configure
+uint8_t adc_toggle = 0;	//flag for turning on and off the ADC
+uint8_t uart_channel = 5; //flag for selection of with ADC channel data transmit using UART
 
-
+uint8_t welcome_message[] = "Hola MI NOMBRE ES C.R.A.B";
 
 void configGPIO();
 void configADC();
 void configUART();
 void configPWM();
 void configEINTX();
+void configDMA();
+void configTIMER();
 int map(int x, int in_min, int in_max, int out_min, int out_max);
 void Servo_Write(uint8_t servoID, uint32_t phi, uint32_t lowLimit, uint32_t highLimit);//usa el valor para manipular la PWM asociada a la ID del servo
 void accure_move(uint16_t adc_value, uint8_t *phix, uint8_t servoID);
 /* IRS Handlers*/
 void EINT0_IRQHandler();
+void TIMER0_IRQHandler();
 void EINT1_IRQHandler();
 void ADC_IRQHandler();
 
@@ -44,8 +51,10 @@ int main(){
 	configGPIO();
 	configEINTX();
 	configUART();
+	configDMA();
 	configPWM();
 	configADC();
+
 	uint32_t clock = SystemCoreClock; //check clock frequency while debugging
 
 	while(1){
@@ -159,11 +168,13 @@ void configUART(){
 	/* -------------------------------UART CONFIGURATION------------------------------*/
 	/* -------------------------------------------------------------------------------*/
 	UART_CFG_Type uart0;
-	//UART_FIFO_CFG_Type UARTFIFOConfigStruct;
+	UART_FIFO_CFG_Type UARTFIFOConfigStruct;
 	UART_ConfigStructInit(&uart0); //lo mismo que arriba, pero se hace automaticamente (config por defecto)
 	UART_Init(LPC_UART0, &uart0); //inicializa periferico
-	//UART_FIFOConfigStructInit(&UARTFIFOConfigStruct);
-	//UART_FIFOConfig(LPC_UART0, &UARTFIFOConfigStruct); //inicializa FIFO
+
+	UART_FIFOConfigStructInit(&UARTFIFOConfigStruct);
+	UART_FIFOConfig(LPC_UART0, &UARTFIFOConfigStruct); //inicializa FIFO
+
 	UART_TxCmd(LPC_UART0, ENABLE); //habilita transmision
 }
 
@@ -215,8 +226,9 @@ void configEINTX(){
 	extintx_pin.OpenDrain = PINSEL_PINMODE_NORMAL;
 	PINSEL_ConfigPin(&extintx_pin); //P2.10 as EINT0 (used for accuracy mode selection)
 	extintx_pin.Pinnum = 11;
-	//PINSEL_ConfigPin(&extintx_pin);//P2.11 as EINT1 (used for ADC start/stop)
-
+	PINSEL_ConfigPin(&extintx_pin);//P2.11 as EINT1 (used for ADC start/stop)
+	extintx_pin.Pinnum = 12;
+	PINSEL_ConfigPin(&extintx_pin);//P2.11 as EINT2 (used for change the ADC channel being transmited with UART
 	/* ---------------------------------EINTX CONFIGURATION---------------------------*/
 	/* -------------------------------------------------------------------------------*/
 	EXTI_SetMode(EXTI_EINT0, EXTI_MODE_EDGE_SENSITIVE);
@@ -226,6 +238,27 @@ void configEINTX(){
 //	EXTI_SetMode(EXTI_EINT1, EXTI_MODE_EDGE_SENSITIVE);
 //	EXTI_SetPolarity(EXTI_EINT1, EXTI_POLARITY_LOW_ACTIVE_OR_FALLING_EDGE);
 //	NVIC_EnableIRQ(EINT1_IRQn);
+
+	EXTI_SetMode(EXTI_EINT2, EXTI_MODE_EDGE_SENSITIVE);
+	EXTI_SetPolarity(EXTI_EINT2, EXTI_POLARITY_LOW_ACTIVE_OR_FALLING_EDGE);
+	NVIC_EnableIRQ(EINT2_IRQn);
+}
+
+void configDMA(){
+	 GPDMA_Init();
+	 GPDMA_Channel_CFG_Type dmacfg;
+	 dmacfg.ChannelNum = 0;
+	 dmacfg.SrcMemAddr = (uint32_t) &welcome_message;
+	 dmacfg.DstMemAddr = 0;
+	 dmacfg.TransferSize = sizeof(welcome_message);
+	 dmacfg.TransferWidth = 0;
+	 dmacfg.TransferType = GPDMA_TRANSFERTYPE_M2P;
+	 dmacfg.SrcConn = 0;
+	 dmacfg.DstConn = GPDMA_CONN_UART0_Tx;;
+	 dmacfg.DMALLI = 0;
+
+	 GPDMA_Setup(&dmacfg);
+	 GPDMA_ChannelCmd(0, ENABLE);
 }
 
 int map(int x, int in_min, int in_max, int out_min, int out_max){
@@ -300,6 +333,13 @@ void EINT1_IRQHandler(){
 	}
 	EXTI_ClearEXTIFlag(EXTI_EINT1);
 }
+void EINT2_IRQHandler(){
+	uart_channel++;
+	if (uart_channel == 7){
+		uart_channel = 0;
+	}
+	EXTI_ClearEXTIFlag(EXTI_EINT2);
+}
 
 void ADC_IRQHandler(){
 	/* -----------------------------SERVOS CONTROL LOGIC------------------------------*/
@@ -316,9 +356,6 @@ void ADC_IRQHandler(){
 			LPC_GPIO0->FIOCLR |= (1<<4);
 			//for(i = 0; i<100; i++);
 
-			//adc_val0 = ADC_ChannelGetData(LPC_ADC, 0);
-			//phi0 = map(adc_val0, 0, 4095, 0, 180);
-			//UART_SendByte(LPC_UART0, phi0);
 		}
 		else if (adc_val0 > 2500){
 			LPC_GPIO0->FIOSET |= (1<<5); //set direction of rotation on P0.5
@@ -327,10 +364,6 @@ void ADC_IRQHandler(){
 			//for(i = 0; i<100; i++);
 			LPC_GPIO0->FIOCLR |= (1<<4);
 			//for(i = 0; i<100; i++);
-
-			//adc_val0 = ADC_ChannelGetData(LPC_ADC, 0);
-			//phi0 = map(adc_val0, 0, 4095, 0, 180);
-			//UART_SendByte(LPC_UART0, phi0);
 		}
 	}
 	else if(ADC_ChannelGetStatus(LPC_ADC, 1, ADC_DATA_DONE)){//channel 1 -> used for servo 1 - shouler joint 1
@@ -341,8 +374,10 @@ void ADC_IRQHandler(){
 		else{
 			phi1 = map(adc_val1, 0, 4095, 0, 180);
 			Servo_Write(0 , phi1, 500, 2500); //usamos el valor mapeado para el servo0 directamente
-			UART_SendByte(LPC_UART0, phi1); //mandomos el angulo 'original'
 		}
+		if(uart_channel == 1){UART_SendByte(LPC_UART0, phi1);} //mandomos el angulo 'original'
+
+
 	}
 	else if(ADC_ChannelGetStatus(LPC_ADC, 2, ADC_DATA_DONE)){//channel 1 -> used for servo 2 - shouler joint 2 (mirror)
 
@@ -355,8 +390,10 @@ void ADC_IRQHandler(){
 			if(phi2>90){phi2 = 90 - (phi2-90);}
 			else {phi2 = 90 + (90-phi2);}
 			Servo_Write(1 , phi2, 500, 2500);
-			UART_SendByte(LPC_UART0, phi1); //mandamos el angulo espjeado
 		}
+		if(uart_channel == 2){UART_SendByte(LPC_UART0, phi2);} //mandomos el angulo 'original'
+
+
 	}
 	else if(ADC_ChannelGetStatus(LPC_ADC, 3, ADC_DATA_DONE)){//channel 3 -> used for servo 3 - elbow joint
 
@@ -367,8 +404,7 @@ void ADC_IRQHandler(){
 			phi3 = map(adc_val3, 0, 4095, 0, 180);
 			Servo_Write(2 , phi3, 500, 2500);
 		}
-		UART_SendByte(LPC_UART0, phi3);
-
+		if(uart_channel == 3){UART_SendByte(LPC_UART0, phi3);}
 	}
 	else if(ADC_ChannelGetStatus(LPC_ADC, 4, ADC_DATA_DONE)){//channel 4 -> used for servo 4 - wrist joint 1
 
@@ -379,7 +415,7 @@ void ADC_IRQHandler(){
 			phi4 = map(adc_val4, 0, 4095, 0, 180);
 			Servo_Write(3 , phi4, 500, 2500);
 		}
-		UART_SendByte(LPC_UART0, phi4);
+		if(uart_channel == 4){UART_SendByte(LPC_UART0, phi4);}
 	}
 	else if(ADC_ChannelGetStatus(LPC_ADC, 5, ADC_DATA_DONE)){//channel 5 -> used for servo 5 - wrist joint 2
 
@@ -390,7 +426,7 @@ void ADC_IRQHandler(){
 			phi5 = map(adc_val5, 0, 4095, 0, 180);
 			Servo_Write(4 , phi5, 500, 2500);
 		}
-		UART_SendByte(LPC_UART0, phi5);
+		if(uart_channel == 5){UART_SendByte(LPC_UART0, phi5);}
 	}
 	else if(ADC_ChannelGetStatus(LPC_ADC, 6, ADC_DATA_DONE)){ //channel 6 -> used for servo 6 - gripper joint
 
@@ -401,7 +437,7 @@ void ADC_IRQHandler(){
 			phi6 = map(adc_val6, 0, 4095, 0, 180);
 			Servo_Write(5 , phi6, 500, 2500);
 		}
-		UART_SendByte(LPC_UART0, phi6);
+		if(uart_channel == 6){UART_SendByte(LPC_UART0, phi6);}
 	}
 }
 
